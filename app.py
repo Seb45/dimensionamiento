@@ -40,7 +40,7 @@ def requerir_autenticacion():
         return st.session_state["usuario"]
 
     st.title("Proyecto Horizonte | Acceso")
-    app_url = st.secrets.get("REDIRECT_URL", "http://localhost:8501")
+    app_url = st.secrets.get("REDIRECT_URL", "https://workforcemanagement.streamlit.app/")
     
     try:
         res = supabase.auth.sign_in_with_oauth({
@@ -48,9 +48,6 @@ def requerir_autenticacion():
             "options": {"redirect_to": app_url}
         })
         st.link_button("🌐 Iniciar sesión con Google", res.url, type="primary")
-        if st.button("Entrar como Invitado"):
-            st.session_state["usuario"] = "lider_bpo@horizonte.com"
-            st.rerun()
         st.stop()
     except Exception as e:
         st.error(f"Error: {e}")
@@ -111,7 +108,7 @@ def optimizar_malla(df_curva_semana, ausentismo):
     return pd.DataFrame(res)
 
 # --- 4. INTERFAZ ---
-st.title("Impulso | Dimensionamiento Semanal")
+st.title("Dimensionamiento Semanal")
 st.caption(f"👤 {email_usuario}")
 
 archivo = st.file_uploader("Reporte de volumen", type=['csv', 'xlsx'])
@@ -139,11 +136,11 @@ if archivo:
         st.divider()
         c1, c2 = st.columns(2)
         with c1:
-            aht = st.number_input("AHT (seg)", value=250)
+            aht = st.number_input("AHT (seg)", value=420)
             aus = st.number_input("Ausentismo %", value=9.0)
         with c2:
-            abd = st.number_input("Abandono %", value=5.0)
-            ocu = st.number_input("Ocupación %", value=85.0)
+            abd = st.number_input("Abandono %", value=10.0)
+            ocu = st.number_input("Ocupación %", value=80.0)
 
         if st.button("Calcular Escenarios"):
             with st.spinner("Calculando mallas y cobertura..."):
