@@ -163,26 +163,35 @@ if uploaded_file:
             )
             
             df_malla = optimizar_turnos_6hs(df_curva, ausentismo)
+            # ... (Cálculos de Erlang y Optimización anteriores se mantienen igual)
             
             st.success(f"Optimización completada. Headcount necesario: {df_malla['Agentes'].sum()} asesores.")
             
-            c1, c2 = st.columns([1, 2])
-            with c1:
-                st.write("Requerimientos")
-                st.dataframe(df_curva[['Intervalo', col_llamadas, 'Requeridos']])
-            with c2:
-                st.write("Malla de Turnos")
-                st.dataframe(df_malla)
+            col_res1, col_res2 = st.columns([1, 2])
+            with col_res1:
+                st.write("Requerimientos por Intervalo")
+                # Blindaje para la tabla de requerimientos
+                st.dataframe(df_curva[['Intervalo', col_llamadas, 'Requeridos']].astype(str))
                 
+            with col_res2:
+                st.write("Malla de Turnos Optimizada")
+                # --- SOLUCIÓN AL ERROR DEL AGENTE 10 ---
+                # Forzamos la visualización de la malla como texto para evitar fallos de PyArrow
+                st.dataframe(df_malla.astype(str))
+                
+            # Paso 3: Guardado en Supabase (Se mantiene igual)
             if supabase:
                 try:
+                    # Usamos tu identificador profesional
                     payload = {
-                        "usuario_email": "sebastian@horizonte.com", # Identificador profesional
-                        "parametros": {"aht": aht, "ausentismo": ausentismo, "abandono": abandono_obj},
+                        "usuario_email": "sebastian.cedermas@horizonte.com", 
+                        "parametros": {"aht": aht, "ausentismo": ausentismo, "abandono": abandono_obj, "ocupacion": ocupacion_max},
                         "volumen_ingresado": df_curva.to_dict(orient="records"),
                         "malla_generada": df_malla.to_dict(orient="records")
                     }
                     supabase.table("escenarios_horizonte").insert(payload).execute()
-                    st.info("Escenario guardado en Supabase.")
+                    st.info("Escenario persistido correctamente en la base de datos.")
                 except Exception as e:
-                    st.error(f"Error en BD: {e}")
+                    st.error(f"Error al guardar en base de datos: {e}")
+
+            
