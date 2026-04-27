@@ -3,7 +3,7 @@ import pandas as pd
 import pulp
 import math
 import openpyxl
-import plotly.graph_objects as go # Nueva librería para el gráfico mixto
+import plotly.graph_objects as go
 from supabase import create_client, Client
 
 # --- 1. CONFIGURACIÓN E INICIALIZACIÓN ---
@@ -20,10 +20,10 @@ def init_connection():
 
 supabase = init_connection()
 
-# --- 2. LÓGICA DE AUTENTICACIÓN (GOOGLE AUTH) ---
+# --- 2. LÓGICA DE AUTENTICACIÓN ---
 def requerir_autenticacion():
     if not supabase:
-        st.warning("⚠️ Configuración de Supabase no detectada. Modo local activo.")
+        st.warning("⚠️ Modo local activo.")
         return "usuario_test@horizonte.com"
 
     if "code" in st.query_params:
@@ -34,7 +34,7 @@ def requerir_autenticacion():
             st.query_params.clear()
             st.rerun()
         except Exception as e:
-            st.error(f"Error al procesar el retorno de Google: {e}")
+            st.error(f"Error: {e}")
 
     if st.session_state.get("usuario"):
         return st.session_state["usuario"]
@@ -48,12 +48,12 @@ def requerir_autenticacion():
             "options": {"redirect_to": app_url}
         })
         st.link_button("🌐 Iniciar sesión con Google", res.url, type="primary")
-        if st.button("Entrar como Invitado (Modo Desarrollo)"):
+        if st.button("Entrar como Invitado"):
             st.session_state["usuario"] = "lider_bpo@horizonte.com"
             st.rerun()
         st.stop()
     except Exception as e:
-        st.error(f"Error de conexión: {e}")
+        st.error(f"Error: {e}")
         st.stop()
 
 email_usuario = requerir_autenticacion()
@@ -110,7 +110,7 @@ def optimizar_malla(df_curva_semana, ausentismo):
             })
     return pd.DataFrame(res)
 
-# --- 4. INTERFAZ Y PROCESAMIENTO ---
+# --- 4. INTERFAZ ---
 st.title("Impulso | Dimensionamiento Semanal")
 st.caption(f"👤 {email_usuario}")
 
@@ -131,15 +131,10 @@ if archivo:
         df_semanal = df_clean.groupby(['Semana', 'Intervalo'])[col_l].mean().reset_index()
         df_semanal = df_semanal[(df_semanal['Intervalo'] >= '09:00:00') & (df_semanal['Intervalo'] <= '20:30:00')]
 
-        st.subheader("📊 Promedios Semanales (Llamadas)")
+        st.subheader("📊 Volumen Promedio por Semana")
         df_pivot = df_semanal.pivot(index='Semana', columns='Intervalo', values=col_l).round(1)
         df_pivot.columns = [str(col)[:5] for col in df_pivot.columns]
         st.dataframe(df_pivot.reset_index().astype(str), hide_index=True)
-
-        st.subheader("📈 Tendencia por Semana")
-        df_chart = df_semanal.copy()
-        df_chart['Intervalo'] = df_chart['Intervalo'].str[:5]
-        st.line_chart(df_chart.pivot(index='Intervalo', columns='Semana', values=col_l))
 
         st.divider()
         c1, c2 = st.columns(2)
@@ -150,8 +145,8 @@ if archivo:
             abd = st.number_input("Abandono %", value=5.0)
             ocu = st.number_input("Ocupación %", value=85.0)
 
-        if st.button("Calcular Nómina Semanal"):
-            with st.spinner("Optimizando mallas y calculando cobertura real..."):
+        if st.button("Calcular Escenarios"):
+            with st.spinner("Calculando mallas y cobertura..."):
                 mallas_totales = []
                 for semana in df_semanal['Semana'].unique():
                     df_sem = df_semanal[df_semanal['Semana'] == semana].copy()
@@ -161,6 +156,7 @@ if archivo:
                     if not df_res.empty:
                         df_res['Semana'] = semana
                         
+                        # --- CÁLCULO DE BALANCE ---
                         intervalos_lista = list(df_sem['Intervalo'])
                         cobertura_real = []
                         merma_factor = (1 - (aus / 100.0 + 10 / 330.0))
@@ -173,87 +169,41 @@ if archivo:
                             cobertura_real.append(round(staff_en_silla * merma_factor, 1))
                         
                         df_sem['Cobertura Real'] = cobertura_real
-                        df_res_final = {"malla": df_res, "balance": df_sem, "semana": semana}
-                        mallas_totales.append(df_res_final)
+                        mallas_totales.append({"malla": df_res, "balance": df_sem, "semana": semana})
                 
                 if mallas_totales:
-                    st.success(f"Nómina y Balance generados para {len(mallas_totales)} semanas.")
-                    
                     for item in mallas_totales:
                         sem = item['semana']
-                        with st.expander(f"📅 Gestión de Staff: {sem}"):
-                            # 1. Mostrar Malla de Horarios
-                            st.write("**Malla de Turnos Optimizada (6hs)**")
-                            df_malla_viz = item['malla'].drop(columns='Semana').copy()
-                            for col in ["Ingreso", "Break", "Salida"]:
-                                df_malla_viz[col] = df_malla_viz[col].str[:5]
-                            st.dataframe(df_malla_viz.reset_index(drop=True).astype(str), hide_index=True)
+                        with st.expander(f"📅 Gestión: {sem}"):
+                            # INDICADORES SOLICITADOS
+                            total_programado = item['malla']['Agentes'].sum()
+                            max_requerido = item['balance']['Requeridos'].max()
+                            prom_requerido = round(item['balance']['Requeridos'].mean(), 1)
+
+                            k1, k2, k3 = st.columns(3)
+                            k1.metric("Total Programado", f"{total_programado} pers.")
+                            k2.metric("Pico Requerido Erlang", f"{max_requerido} pers.")
+                            k3.metric("Promedio Requerido", f"{prom_requerido} pers.")
+
+                            st.write("**Malla de Horarios**")
+                            df_m_viz = item['malla'].drop(columns='Semana').copy()
+                            for c in ["Ingreso", "Break", "Salida"]: df_m_viz[c] = df_m_viz[c].str[:5]
+                            st.dataframe(df_m_viz.reset_index(drop=True).astype(str), hide_index=True)
                             
-                            # 2. Preparar el DataFrame de Balance
-                            st.write("**Balance de Cobertura (Neto vs Requerido)**")
+                            st.write("**Balance de Cobertura**")
                             df_bal = item['balance'][['Intervalo', 'Requeridos', 'Cobertura Real']].copy()
                             df_bal['Diferencia'] = (df_bal['Cobertura Real'] - df_bal['Requeridos']).round(1)
                             df_bal['Intervalo'] = df_bal['Intervalo'].str[:5]
+                            st.dataframe(df_bal.set_index('Intervalo').T.reset_index().round(1).astype(str), hide_index=True)
                             
-                            # Mostrar Tabla Horizontal
-                            df_bal_h = df_bal.set_index('Intervalo').T.reset_index().round(1)
-                            st.dataframe(df_bal_h.astype(str), hide_index=True)
-                            
-                            # 3. Mostrar Gráfico Mixto (Plotly)
-                            st.write("**Curva de Capacidad y Gap por Intervalo**")
-                            
+                            # Gráfico Mixto
                             fig = go.Figure()
-                            
-                            # Barras de Diferencia (Rojo si es negativo, Verde/Gris si es positivo)
-                            colores_barras = ['#EF553B' if val < 0 else '#00CC96' for val in df_bal['Diferencia']]
-                            fig.add_trace(go.Bar(
-                                x=df_bal['Intervalo'], 
-                                y=df_bal['Diferencia'], 
-                                name='Diferencia (Gap)', 
-                                marker_color=colores_barras,
-                                opacity=0.7
-                            ))
-                            
-                            # Línea Requeridos
-                            fig.add_trace(go.Scatter(
-                                x=df_bal['Intervalo'], 
-                                y=df_bal['Requeridos'], 
-                                mode='lines+markers', 
-                                name='Requeridos',
-                                line=dict(color='#636EFA', width=3)
-                            ))
-                            
-                            # Línea Cobertura Real
-                            fig.add_trace(go.Scatter(
-                                x=df_bal['Intervalo'], 
-                                y=df_bal['Cobertura Real'], 
-                                mode='lines+markers', 
-                                name='Cobertura Real',
-                                line=dict(color='#333333', width=3, dash='dot')
-                            ))
-                            
-                            # Formato del gráfico
-                            fig.update_layout(
-                                xaxis_title="Intervalo",
-                                yaxis_title="Agentes",
-                                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                                margin=dict(l=0, r=0, t=30, b=0),
-                                hovermode="x unified"
-                            )
-                            
+                            colores = ['#EF553B' if v < 0 else '#00CC96' for v in df_bal['Diferencia']]
+                            fig.add_trace(go.Bar(x=df_bal['Intervalo'], y=df_bal['Diferencia'], name='Gap', marker_color=colores))
+                            fig.add_trace(go.Scatter(x=df_bal['Intervalo'], y=df_bal['Requeridos'], name='Req Erlang', line=dict(color='#636EFA', width=3)))
+                            fig.add_trace(go.Scatter(x=df_bal['Intervalo'], y=df_bal['Cobertura Real'], name='Cobertura Real', line=dict(color='#333333', dash='dot')))
+                            fig.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0), legend=dict(orientation="h", y=1.2))
                             st.plotly_chart(fig, use_container_width=True)
 
-                    if supabase:
-                        try:
-                            malla_db = pd.concat([i['malla'] for i in mallas_totales])
-                            supabase.table("escenarios_horizonte").insert({
-                                "usuario_email": email_usuario,
-                                "parametros": {"aht": aht, "aus": aus, "abd": abd},
-                                "malla_generada": malla_db.to_dict(orient="records")
-                            }).execute()
-                        except Exception as e:
-                            st.error(f"Error en BD: {e}")
-                else:
-                    st.error("No se halló solución óptima.")
     except Exception as e:
-        st.error(f"Error técnico: {e}")
+        st.error(f"Error: {e}")
