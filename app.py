@@ -39,7 +39,7 @@ def requerir_autenticacion():
         return st.session_state["usuario"]
 
     st.title("Proyecto Horizonte | Acceso")
-    app_url = st.secrets.get("REDIRECT_URL", "http://localhost:8501")
+    app_url = st.secrets.get("REDIRECT_URL", "https://workforcemanagement.streamlit.app/")
     
     try:
         res = supabase.auth.sign_in_with_oauth({
@@ -47,9 +47,6 @@ def requerir_autenticacion():
             "options": {"redirect_to": app_url}
         })
         st.link_button("🌐 Iniciar sesión con Google", res.url, type="primary")
-        if st.button("Entrar como Invitado (Modo Desarrollo)"):
-            st.session_state["usuario"] = "lider_bpo@horizonte.com"
-            st.rerun()
         st.stop()
     except Exception as e:
         st.error(f"Error de conexión: {e}")
