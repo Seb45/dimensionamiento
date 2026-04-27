@@ -122,6 +122,15 @@ if uploaded_file:
     # Limpiar filas de 'Total' comunes en las exportaciones de reportes
     df_clean = df_raw[~df_raw['Intervalo'].astype(str).str.contains('Total', case=False, na=False)].copy()
     
+    # --- LA SOLUCIÓN: Forzar que toda la columna sea texto para evitar conflictos ---
+    df_clean['Intervalo'] = df_clean['Intervalo'].astype(str)
+    
+    # Algunos formatos de Excel cortan los segundos, esto asegura que el formato sea HH:MM:SS
+    df_clean['Intervalo'] = df_clean['Intervalo'].apply(lambda x: x + ':00' if len(x) == 5 else x)
+    # -------------------------------------------------------------------------------
+    
+    # Agrupar por intervalo para obtener el volumen promedio
+    df_clean['Llam Recibidas'] = pd.to_numeric(df_clean['Llam Recibidas'], errors='coerce').fillna(0)
     # Agrupar por intervalo para obtener el volumen promedio (útil si hay varios días en el archivo)
     df_clean['Llam Recibidas'] = pd.to_numeric(df_clean['Llam Recibidas'], errors='coerce').fillna(0)
     df_curva = df_clean.groupby('Intervalo')['Llam Recibidas'].mean().reset_index()
