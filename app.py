@@ -125,10 +125,19 @@ if archivo:
         st.subheader("📊 Promedios Semanales (Vista Horizontal)")
         # Pivotar para vista horizontal con 1 decimal
         df_pivot = df_semanal.pivot(index='Semana', columns='Intervalo', values=col_l).round(1)
+        
+        # --- AJUSTE VISUAL: Dejar las columnas en formato HH:MM ---
+        df_pivot.columns = [str(col)[:5] for col in df_pivot.columns]
+        
         st.dataframe(df_pivot.reset_index().astype(str), hide_index=True)
 
         st.subheader("📈 Tendencia por Semana")
-        st.line_chart(df_semanal.pivot(index='Intervalo', columns='Semana', values=col_l))
+        # Ajustamos también el gráfico para que el eje X se vea limpio
+        df_chart = df_semanal.copy()
+        df_chart['Intervalo'] = df_chart['Intervalo'].str[:5]
+        st.line_chart(df_chart.pivot(index='Intervalo', columns='Semana', values=col_l))
+
+        
 
         st.divider()
         c1, c2 = st.columns(2)
