@@ -150,13 +150,21 @@ if uploaded_file:
 
     # 2. Limpiar filas de 'Total' comunes en las exportaciones de reportes
     df_clean = df_raw[~df_raw['Intervalo'].astype(str).str.contains('Total', case=False, na=False)].copy()
-    
+
     # --- BLINDAJE 2: Forzar que toda la columna sea texto para evitar conflictos ---
-    df_clean['Intervalo'] = df_clean['Intervalo'].astype(str)
+    # Llenar nulos con texto vacío y convertir a string
+    df_clean['Intervalo'] = df_clean['Intervalo'].fillna('').astype(str)
     
-    # Asegurar que el formato sea HH:MM:SS (agrega :00 si viene como HH:MM)
-    df_clean['Intervalo'] = df_clean['Intervalo'].apply(lambda x: x + ':00' if len(x.strip()) == 5 else x.strip())
+    # Asegurar que el formato sea HH:MM:SS usando str() explícito para evitar fallos de 'float'
+    df_clean['Intervalo'] = df_clean['Intervalo'].apply(
+        lambda x: str(x).strip() + ':00' if len(str(x).strip()) == 5 else str(x).strip()
+    )
     
+    # Eliminar posibles filas que hayan quedado sin intervalo (vacías) tras la limpieza
+    df_clean = df_clean[df_clean['Intervalo'] != '']
+
+    
+
     # 4. Agrupar por intervalo para obtener el volumen promedio
     if 'Llam Recibidas' in df_clean.columns:
         col_llamadas = 'Llam Recibidas'
