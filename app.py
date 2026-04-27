@@ -180,10 +180,9 @@ if uploaded_file:
     df_curva = df_curva[(df_curva['Intervalo'] >= '09:00:00') & (df_curva['Intervalo'] <= '20:30:00')].reset_index(drop=True)
     
     st.write("Curva de llamadas proyectada (Promedio por intervalo):")
-    # Convertimos el Intervalo en el índice antes de transponer para evitar mezclar tipos de datos
-    st.dataframe(df_curva.set_index('Intervalo').T)
-    
-    
+    # astype(str) fuerza a Streamlit a dibujar todo como texto, eliminando el 100% de los errores de PyArrow
+    st.dataframe(df_curva.set_index('Intervalo').T.astype(str))
+      
     
     st.divider()
     
