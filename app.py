@@ -123,3 +123,71 @@ def optimizar_turnos_6hs(df_curva, ausentismo_pct):
                 "Break": intervalos[j],
                 "Salida": intervalos[i+11],
                 "Agentes": int(val)
+            })
+    return pd.DataFrame(resultados)
+
+
+# --- 5. INTERFAZ Y VISUALIZACIÓN SEGURA ---
+st.title("Proyecto Horizonte | Optimización de Staffing")
+st.caption(f"👤 Operador: {usuario_actual}")
+
+uploaded_file = st.file_uploader("Cargar volumen por intervalo", type=['csv', 'xlsx'])
+
+if uploaded_file:
+    try:
+        # Ingesta
+        df_raw = pd.read_csv(uploaded_file, sep=None, engine='python') if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
+        df_raw.columns = df_raw.columns.str.strip()
+        
+        # Limpieza de datos
+        df_clean = df_raw[~df_raw['Intervalo'].astype(str).str.contains('Total', case=False)].copy()
+        df_clean['Intervalo'] = df_clean['Intervalo'].fillna('').astype(str).str.strip()
+        df_clean['Intervalo'] = df_clean['Intervalo'].apply(lambda x: x + ':00' if len(x) == 5 else x)
+        df_clean = df_clean[df_clean['Intervalo'] != ''].sort_values('Intervalo')
+        
+        col_llam = 'Llam Recibidas'
+        df_clean[col_llam] = pd.to_numeric(df_clean[col_llam], errors='coerce').fillna(0)
+        df_curva = df_clean.groupby('Intervalo')[col_llam].mean().reset_index()
+        df_curva = df_curva[(df_curva['Intervalo'] >= '09:00:00') & (df_curva['Intervalo'] <= '20:30:00')].reset_index(drop=True)
+        
+        st.write("Curva de Entrada Proyectada:")
+        # Blindaje para la visualización transpuesta
+        df_display_curva = df_curva.set_index('Intervalo').T.reset_index().astype(str)
+        st.dataframe(df_display_curva, hide_index=True)
+
+        st.divider()
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            aht_val = st.number_input("AHT (seg)", value=250)
+            aus_val = st.number_input("Ausentismo %", value=9.0)
+        with col_p2:
+            abd_val = st.number_input("Abandono Objetivo %", value=5.0)
+            ocu_val = st.number_input("Ocupación Máxima %", value=85.0)
+
+        if st.button("Ejecutar Optimización"):
+            with st.spinner("Procesando motor matemático..."):
+                df_curva['Requeridos'] = df_curva[col_llam].apply(lambda x: calcular_requeridos(x, aht_val, abd_val, ocu_val))
+                df_malla = optimizar_turnos_6hs(df_curva, aus_val)
+                
+                if not df_malla.empty:
+                    st.success(f"Malla generada con éxito. Headcount total: {df_malla['Agentes'].sum()}")
+                    
+                    # Blindaje total de la tabla de resultados para evitar fallos de ArrowTypeError
+                    st.dataframe(df_malla.reset_index(drop=True).astype(str), hide_index=True)
+                    
+                    if supabase:
+                        try:
+                            payload = {
+                                "usuario_email": usuario_actual,
+                                "parametros": {"aht": aht_val, "aus": aus_val, "abd": abd_val, "ocu": ocu_val},
+                                "malla_generada": df_malla.to_dict(orient="records")
+                            }
+                            supabase.table("escenarios_horizonte").insert(payload).execute()
+                            st.info("Escenario guardado en base de datos bajo el usuario actual.")
+                        except Exception as e:
+                            st.error(f"Error al persistir en BD: {e}")
+                else:
+                    st.error("No se encontró una solución óptima para los parámetros ingresados.")
+                    
+    except Exception as e:
+        st.error(f"Error en el procesamiento: {e}")
