@@ -3,6 +3,7 @@ import pandas as pd
 import pulp
 import math
 import openpyxl
+import plotly.graph_objects as go # Nueva librería para el gráfico mixto
 from supabase import create_client, Client
 
 # --- 1. CONFIGURACIÓN E INICIALIZACIÓN ---
@@ -79,7 +80,6 @@ def calcular_requeridos(llamadas, aht, abd_obj, ocu_max):
     return agentes
 
 def optimizar_malla(df_curva_semana, ausentismo):
-    # Merma total: Ausentismo + 10 min de baño sobre 330 min operativos
     merma = (ausentismo / 100.0) + (10 / 330.0)
     prob = pulp.LpProblem("Opt", pulp.LpMinimize)
     intervalos = list(df_curva_semana['Intervalo'])
@@ -161,7 +161,6 @@ if archivo:
                     if not df_res.empty:
                         df_res['Semana'] = semana
                         
-                        # --- CÁLCULO DE COBERTURA REAL POR INTERVALO ---
                         intervalos_lista = list(df_sem['Intervalo'])
                         cobertura_real = []
                         merma_factor = (1 - (aus / 100.0 + 10 / 330.0))
@@ -169,11 +168,8 @@ if archivo:
                         for t in intervalos_lista:
                             staff_en_silla = 0
                             for _, turno in df_res.iterrows():
-                                # El agente está trabajando si el intervalo t está entre su ingreso y antes de su salida
-                                # Y no es su horario de break
                                 if turno['Ingreso'] <= t < turno['Salida'] and t != turno['Break']:
                                     staff_en_silla += turno['Agentes']
-                            
                             cobertura_real.append(round(staff_en_silla * merma_factor, 1))
                         
                         df_sem['Cobertura Real'] = cobertura_real
@@ -193,26 +189,68 @@ if archivo:
                                 df_malla_viz[col] = df_malla_viz[col].str[:5]
                             st.dataframe(df_malla_viz.reset_index(drop=True).astype(str), hide_index=True)
                             
-                            # 2. Mostrar Balance de Cobertura
+                            # 2. Preparar el DataFrame de Balance
                             st.write("**Balance de Cobertura (Neto vs Requerido)**")
                             df_bal = item['balance'][['Intervalo', 'Requeridos', 'Cobertura Real']].copy()
                             df_bal['Diferencia'] = (df_bal['Cobertura Real'] - df_bal['Requeridos']).round(1)
-                            
-                            # Transponer para vista horizontal HH:MM
                             df_bal['Intervalo'] = df_bal['Intervalo'].str[:5]
+                            
+                            # Mostrar Tabla Horizontal
                             df_bal_h = df_bal.set_index('Intervalo').T.reset_index().round(1)
                             st.dataframe(df_bal_h.astype(str), hide_index=True)
+                            
+                            # 3. Mostrar Gráfico Mixto (Plotly)
+                            st.write("**Curva de Capacidad y Gap por Intervalo**")
+                            
+                            fig = go.Figure()
+                            
+                            # Barras de Diferencia (Rojo si es negativo, Verde/Gris si es positivo)
+                            colores_barras = ['#EF553B' if val < 0 else '#00CC96' for val in df_bal['Diferencia']]
+                            fig.add_trace(go.Bar(
+                                x=df_bal['Intervalo'], 
+                                y=df_bal['Diferencia'], 
+                                name='Diferencia (Gap)', 
+                                marker_color=colores_barras,
+                                opacity=0.7
+                            ))
+                            
+                            # Línea Requeridos
+                            fig.add_trace(go.Scatter(
+                                x=df_bal['Intervalo'], 
+                                y=df_bal['Requeridos'], 
+                                mode='lines+markers', 
+                                name='Requeridos',
+                                line=dict(color='#636EFA', width=3)
+                            ))
+                            
+                            # Línea Cobertura Real
+                            fig.add_trace(go.Scatter(
+                                x=df_bal['Intervalo'], 
+                                y=df_bal['Cobertura Real'], 
+                                mode='lines+markers', 
+                                name='Cobertura Real',
+                                line=dict(color='#333333', width=3, dash='dot')
+                            ))
+                            
+                            # Formato del gráfico
+                            fig.update_layout(
+                                xaxis_title="Intervalo",
+                                yaxis_title="Agentes",
+                                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                                margin=dict(l=0, r=0, t=30, b=0),
+                                hovermode="x unified"
+                            )
+                            
+                            st.plotly_chart(fig, use_container_width=True)
 
                     if supabase:
                         try:
-                            # Guardamos solo la malla para no saturar la BD (el balance se recalcula)
                             malla_db = pd.concat([i['malla'] for i in mallas_totales])
                             supabase.table("escenarios_horizonte").insert({
                                 "usuario_email": email_usuario,
                                 "parametros": {"aht": aht, "aus": aus, "abd": abd},
                                 "malla_generada": malla_db.to_dict(orient="records")
                             }).execute()
-                            st.info("✅ Escenarios guardados en BD.")
                         except Exception as e:
                             st.error(f"Error en BD: {e}")
                 else:
