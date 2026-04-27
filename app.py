@@ -182,7 +182,7 @@ if archivo:
                     
 
 
-                    if supabase:
+                   if supabase:
                         try:
                             # Preparamos el payload exacto
                             payload = {
@@ -194,7 +194,7 @@ if archivo:
                                     "ocu": float(ocu)
                                 },
                                 "volumen_ingresado": df_curva.to_dict(orient="records"),
-                                "malla_generated": df_malla.to_dict(orient="records")
+                                "malla_generada": df_malla.to_dict(orient="records") # <-- ¡CORRECCIÓN AQUÍ!
                             }
                             
                             # Intentamos la inserción
@@ -203,11 +203,7 @@ if archivo:
                             st.info("✅ Escenario persistido correctamente en Supabase.")
                             
                         except Exception as e:
-                            # Esto te dirá exactamente por qué falla la base de datos
-                            st.error(f"❌ Error de base de datos: {str(e)}")
-                            # Imprimimos el payload en consola para que verifiques qué se intentó enviar
-                            print(f"DEBUG PAYLOAD: {payload}")
-                
+                            st.error(f"❌ Error de base de datos: {str(e)}")                
                 else:
                     st.error("No se pudo hallar una solución óptima con estos parámetros.")
                     
