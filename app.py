@@ -142,11 +142,11 @@ if archivo:
         st.divider()
         c1, c2 = st.columns(2)
         with c1:
-            aht = st.number_input("AHT (seg)", value=250)
+            aht = st.number_input("AHT (seg)", value=420)
             aus = st.number_input("Ausentismo %", value=9.0)
         with c2:
-            abd = st.number_input("Abandono %", value=5.0)
-            ocu = st.number_input("Ocupación %", value=85.0)
+            abd = st.number_input("Abandono %", value=10.0)
+            ocu = st.number_input("Ocupación %", value=70.0)
 
         if st.button("Calcular Nómina Semanal"):
             with st.spinner("Optimizando mallas..."):
