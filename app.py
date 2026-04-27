@@ -3,6 +3,7 @@ import pandas as pd
 import pulp
 import math
 from supabase import create_client, Client
+import openpyxl
 
 # --- 1. CONFIGURACIÓN E INICIALIZACIÓN DE SUPABASE ---
 st.set_page_config(page_title="Proyecto Horizonte", layout="wide")
