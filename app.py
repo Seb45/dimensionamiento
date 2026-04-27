@@ -180,18 +180,37 @@ if archivo:
                     # BLINDAJE FINAL: Soluciona el error del Agente 10 y tipos mixtos
                     st.dataframe(df_malla.reset_index(drop=True).astype(str), hide_index=True)
                     
+
+
                     if supabase:
                         try:
-                            supabase.table("escenarios_horizonte").insert({
-                                "usuario_email": email_usuario,
-                                "parametros": {"aht": aht, "aus": aus, "abd": abd},
-                                "malla_generada": df_malla.to_dict(orient="records")
-                            }).execute()
-                            st.info("Resultado guardado en Supabase.")
+                            # Preparamos el payload exacto
+                            payload = {
+                                "usuario_email": str(email_usuario),
+                                "parametros": {
+                                    "aht": float(aht), 
+                                    "aus": float(aus), 
+                                    "abd": float(abd), 
+                                    "ocu": float(ocu)
+                                },
+                                "volumen_ingresado": df_curva.to_dict(orient="records"),
+                                "malla_generated": df_malla.to_dict(orient="records")
+                            }
+                            
+                            # Intentamos la inserción
+                            respuesta = supabase.table("escenarios_horizonte").insert(payload).execute()
+                            
+                            st.info("✅ Escenario persistido correctamente en Supabase.")
+                            
                         except Exception as e:
-                            st.error(f"Error al guardar en BD: {e}")
+                            # Esto te dirá exactamente por qué falla la base de datos
+                            st.error(f"❌ Error de base de datos: {str(e)}")
+                            # Imprimimos el payload en consola para que verifiques qué se intentó enviar
+                            print(f"DEBUG PAYLOAD: {payload}")
+                
                 else:
                     st.error("No se pudo hallar una solución óptima con estos parámetros.")
+                    
 
     except Exception as e:
         st.error(f"Error técnico: {e}")
