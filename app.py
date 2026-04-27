@@ -6,7 +6,7 @@ import openpyxl
 from supabase import create_client, Client
 
 # --- 1. CONFIGURACIÓN E INICIALIZACIÓN ---
-st.set_page_config(page_title="Dimensionamiento", layout="wide")
+st.set_page_config(page_title="Proyecto Horizonte", layout="wide")
 
 @st.cache_resource
 def init_connection():
@@ -38,8 +38,8 @@ def requerir_autenticacion():
     if st.session_state.get("usuario"):
         return st.session_state["usuario"]
 
-    st.title("Dimensionamiento | Acceso")
-    app_url = st.secrets.get("REDIRECT_URL", "https://workforcemanagement.streamlit.app/")
+    st.title("Proyecto Horizonte | Acceso")
+    app_url = st.secrets.get("REDIRECT_URL", "http://localhost:8501")
     
     try:
         res = supabase.auth.sign_in_with_oauth({
@@ -47,6 +47,9 @@ def requerir_autenticacion():
             "options": {"redirect_to": app_url}
         })
         st.link_button("🌐 Iniciar sesión con Google", res.url, type="primary")
+        if st.button("Entrar como Invitado (Modo Desarrollo)"):
+            st.session_state["usuario"] = "lider_bpo@horizonte.com"
+            st.rerun()
         st.stop()
     except Exception as e:
         st.error(f"Error de conexión: {e}")
@@ -76,6 +79,7 @@ def calcular_requeridos(llamadas, aht, abd_obj, ocu_max):
     return agentes
 
 def optimizar_malla(df_curva_semana, ausentismo):
+    # Merma total: Ausentismo + 10 min de baño sobre 330 min operativos
     merma = (ausentismo / 100.0) + (10 / 330.0)
     prob = pulp.LpProblem("Opt", pulp.LpMinimize)
     intervalos = list(df_curva_semana['Intervalo'])
@@ -92,15 +96,12 @@ def optimizar_malla(df_curva_semana, ausentismo):
             
     prob.solve(pulp.PULP_CBC_CMD(msg=False))
     if pulp.LpStatus[prob.status] != 'Optimal': return pd.DataFrame()
-
-
+    
     res = []
     for (i, j) in turnos:
         if x[(i, j)].varValue > 0:
-            # Calculamos la salida real sumando 30 min al inicio del 12vo intervalo
             inicio_ult_intervalo = pd.to_datetime(intervalos[i+11], format='%H:%M:%S')
             salida_real = (inicio_ult_intervalo + pd.Timedelta(minutes=30)).strftime('%H:%M:%S')
-            
             res.append({
                 "Ingreso": intervalos[i], 
                 "Break": intervalos[j], 
@@ -110,7 +111,7 @@ def optimizar_malla(df_curva_semana, ausentismo):
     return pd.DataFrame(res)
 
 # --- 4. INTERFAZ Y PROCESAMIENTO ---
-st.title("Dimensionamiento Semanal")
+st.title("Impulso | Dimensionamiento Semanal")
 st.caption(f"👤 {email_usuario}")
 
 archivo = st.file_uploader("Reporte de volumen", type=['csv', 'xlsx'])
@@ -120,7 +121,6 @@ if archivo:
         df_raw = pd.read_csv(archivo, sep=None, engine='python') if archivo.name.endswith('.csv') else pd.read_excel(archivo)
         df_raw.columns = df_raw.columns.str.strip()
         
-        # Limpieza y detección de Semana
         df_clean = df_raw[~df_raw['Intervalo'].astype(str).str.contains('Total', case=False)].copy()
         df_clean['Intervalo'] = df_clean['Intervalo'].fillna('').astype(str).str.strip()
         df_clean['Intervalo'] = df_clean['Intervalo'].apply(lambda x: x + ':00' if len(x) == 5 else x)
@@ -128,38 +128,30 @@ if archivo:
         col_l = 'Llam Recibidas'
         df_clean[col_l] = pd.to_numeric(df_clean[col_l], errors='coerce').fillna(0)
         
-        # Agrupación por Semana e Intervalo
         df_semanal = df_clean.groupby(['Semana', 'Intervalo'])[col_l].mean().reset_index()
         df_semanal = df_semanal[(df_semanal['Intervalo'] >= '09:00:00') & (df_semanal['Intervalo'] <= '20:30:00')]
 
-        st.subheader("📊 Promedios Semanales (Vista Horizontal)")
-        # Pivotar para vista horizontal con 1 decimal
+        st.subheader("📊 Promedios Semanales (Llamadas)")
         df_pivot = df_semanal.pivot(index='Semana', columns='Intervalo', values=col_l).round(1)
-        
-        # --- AJUSTE VISUAL: Dejar las columnas en formato HH:MM ---
         df_pivot.columns = [str(col)[:5] for col in df_pivot.columns]
-        
         st.dataframe(df_pivot.reset_index().astype(str), hide_index=True)
 
         st.subheader("📈 Tendencia por Semana")
-        # Ajustamos también el gráfico para que el eje X se vea limpio
         df_chart = df_semanal.copy()
         df_chart['Intervalo'] = df_chart['Intervalo'].str[:5]
         st.line_chart(df_chart.pivot(index='Intervalo', columns='Semana', values=col_l))
 
-        
-
         st.divider()
         c1, c2 = st.columns(2)
         with c1:
-            aht = st.number_input("AHT (seg)", value=420)
+            aht = st.number_input("AHT (seg)", value=250)
             aus = st.number_input("Ausentismo %", value=9.0)
         with c2:
-            abd = st.number_input("Abandono %", value=10.0)
-            ocu = st.number_input("Ocupación %", value=70.0)
+            abd = st.number_input("Abandono %", value=5.0)
+            ocu = st.number_input("Ocupación %", value=85.0)
 
         if st.button("Calcular Nómina Semanal"):
-            with st.spinner("Optimizando mallas..."):
+            with st.spinner("Optimizando mallas y calculando cobertura real..."):
                 mallas_totales = []
                 for semana in df_semanal['Semana'].unique():
                     df_sem = df_semanal[df_semanal['Semana'] == semana].copy()
@@ -168,27 +160,59 @@ if archivo:
                     df_res = optimizar_malla(df_sem, aus)
                     if not df_res.empty:
                         df_res['Semana'] = semana
-                        mallas_totales.append(df_res)
+                        
+                        # --- CÁLCULO DE COBERTURA REAL POR INTERVALO ---
+                        intervalos_lista = list(df_sem['Intervalo'])
+                        cobertura_real = []
+                        merma_factor = (1 - (aus / 100.0 + 10 / 330.0))
+                        
+                        for t in intervalos_lista:
+                            staff_en_silla = 0
+                            for _, turno in df_res.iterrows():
+                                # El agente está trabajando si el intervalo t está entre su ingreso y antes de su salida
+                                # Y no es su horario de break
+                                if turno['Ingreso'] <= t < turno['Salida'] and t != turno['Break']:
+                                    staff_en_silla += turno['Agentes']
+                            
+                            cobertura_real.append(round(staff_en_silla * merma_factor, 1))
+                        
+                        df_sem['Cobertura Real'] = cobertura_real
+                        df_res_final = {"malla": df_res, "balance": df_sem, "semana": semana}
+                        mallas_totales.append(df_res_final)
                 
                 if mallas_totales:
-                    df_final = pd.concat(mallas_totales)
-                    st.success(f"Nómina generada para {len(mallas_totales)} semanas.")
+                    st.success(f"Nómina y Balance generados para {len(mallas_totales)} semanas.")
                     
-                    # Mostrar nómina separada por semana
-                    for sem in df_final['Semana'].unique():
-                        with st.expander(f"📅 Nómina: {sem}"):
-                            df_sem_viz = df_final[df_final['Semana'] == sem].drop(columns='Semana')
-                            st.write(f"**Total agentes necesarios:** {df_sem_viz['Agentes'].sum()}")
-                            st.dataframe(df_sem_viz.reset_index(drop=True).astype(str), hide_index=True)
+                    for item in mallas_totales:
+                        sem = item['semana']
+                        with st.expander(f"📅 Gestión de Staff: {sem}"):
+                            # 1. Mostrar Malla de Horarios
+                            st.write("**Malla de Turnos Optimizada (6hs)**")
+                            df_malla_viz = item['malla'].drop(columns='Semana').copy()
+                            for col in ["Ingreso", "Break", "Salida"]:
+                                df_malla_viz[col] = df_malla_viz[col].str[:5]
+                            st.dataframe(df_malla_viz.reset_index(drop=True).astype(str), hide_index=True)
+                            
+                            # 2. Mostrar Balance de Cobertura
+                            st.write("**Balance de Cobertura (Neto vs Requerido)**")
+                            df_bal = item['balance'][['Intervalo', 'Requeridos', 'Cobertura Real']].copy()
+                            df_bal['Diferencia'] = (df_bal['Cobertura Real'] - df_bal['Requeridos']).round(1)
+                            
+                            # Transponer para vista horizontal HH:MM
+                            df_bal['Intervalo'] = df_bal['Intervalo'].str[:5]
+                            df_bal_h = df_bal.set_index('Intervalo').T.reset_index().round(1)
+                            st.dataframe(df_bal_h.astype(str), hide_index=True)
 
                     if supabase:
                         try:
+                            # Guardamos solo la malla para no saturar la BD (el balance se recalcula)
+                            malla_db = pd.concat([i['malla'] for i in mallas_totales])
                             supabase.table("escenarios_horizonte").insert({
                                 "usuario_email": email_usuario,
                                 "parametros": {"aht": aht, "aus": aus, "abd": abd},
-                                "malla_generada": df_final.to_dict(orient="records")
+                                "malla_generada": malla_db.to_dict(orient="records")
                             }).execute()
-                            st.info("✅ Escenarios semanales guardados en BD.")
+                            st.info("✅ Escenarios guardados en BD.")
                         except Exception as e:
                             st.error(f"Error en BD: {e}")
                 else:
