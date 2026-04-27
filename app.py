@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 from supabase import create_client, Client
 
 # --- 1. CONFIGURACIÓN E INICIALIZACIÓN ---
-st.set_page_config(page_title="Proyecto Horizonte", layout="wide")
+st.set_page_config(page_title="Herramienta de dimensionamiento", layout="wide")
 
 @st.cache_resource
 def init_connection():
