@@ -181,8 +181,7 @@ if archivo:
                     st.dataframe(df_malla.reset_index(drop=True).astype(str), hide_index=True)
                     
 
-
-                   if supabase:
+                    if supabase:
                         try:
                             # Preparamos el payload exacto
                             payload = {
