@@ -92,11 +92,21 @@ def optimizar_malla(df_curva_semana, ausentismo):
             
     prob.solve(pulp.PULP_CBC_CMD(msg=False))
     if pulp.LpStatus[prob.status] != 'Optimal': return pd.DataFrame()
-    
+
+
     res = []
     for (i, j) in turnos:
         if x[(i, j)].varValue > 0:
-            res.append({"Ingreso": intervalos[i], "Break": intervalos[j], "Salida": intervalos[i+11], "Agentes": int(x[(i, j)].varValue)})
+            # Calculamos la salida real sumando 30 min al inicio del 12vo intervalo
+            inicio_ult_intervalo = pd.to_datetime(intervalos[i+11], format='%H:%M:%S')
+            salida_real = (inicio_ult_intervalo + pd.Timedelta(minutes=30)).strftime('%H:%M:%S')
+            
+            res.append({
+                "Ingreso": intervalos[i], 
+                "Break": intervalos[j], 
+                "Salida": salida_real, 
+                "Agentes": int(x[(i, j)].varValue)
+            })
     return pd.DataFrame(res)
 
 # --- 4. INTERFAZ Y PROCESAMIENTO ---
