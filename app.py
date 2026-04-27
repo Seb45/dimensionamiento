@@ -6,7 +6,7 @@ import openpyxl
 from supabase import create_client, Client
 
 # --- 1. CONFIGURACIÓN E INICIALIZACIÓN ---
-st.set_page_config(page_title="Proyecto Horizonte", layout="wide")
+st.set_page_config(page_title="Dimensionamiento", layout="wide")
 
 @st.cache_resource
 def init_connection():
@@ -38,7 +38,7 @@ def requerir_autenticacion():
     if st.session_state.get("usuario"):
         return st.session_state["usuario"]
 
-    st.title("Proyecto Horizonte | Acceso")
+    st.title("Dimensionamiento | Acceso")
     app_url = st.secrets.get("REDIRECT_URL", "https://workforcemanagement.streamlit.app/")
     
     try:
@@ -110,7 +110,7 @@ def optimizar_malla(df_curva_semana, ausentismo):
     return pd.DataFrame(res)
 
 # --- 4. INTERFAZ Y PROCESAMIENTO ---
-st.title("Impulso | Dimensionamiento Semanal")
+st.title("Dimensionamiento Semanal")
 st.caption(f"👤 {email_usuario}")
 
 archivo = st.file_uploader("Reporte de volumen", type=['csv', 'xlsx'])
