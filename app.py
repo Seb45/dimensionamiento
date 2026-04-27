@@ -39,7 +39,7 @@ def requerir_autenticacion():
     if st.session_state.get("usuario"):
         return st.session_state["usuario"]
 
-    st.title("Proyecto Horizonte | Acceso")
+    st.title("Herramienta de dimensionamiento | Acceso")
     app_url = st.secrets.get("REDIRECT_URL", "https://workforcemanagement.streamlit.app/")
     
     try:
