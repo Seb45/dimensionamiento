@@ -1,6 +1,5 @@
 streamlit
 pandas
 pulp
-supabase
 openpyxl
 plotly
